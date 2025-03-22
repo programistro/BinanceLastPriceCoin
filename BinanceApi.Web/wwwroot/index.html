@@ -1,0 +1,23 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/5.0.11/signalr.min.js"></script>
+</head>
+<body>
+<h1>BTCUSDT Price: <span id="price"></span></h1>
+
+<script>
+    const connection = new signalR.HubConnectionBuilder()
+        .withUrl("/lastPrice")
+        .build();
+
+    connection.on("ReceivePrice", (price) => {
+        document.getElementById("price").innerText = price;
+    });
+
+    connection.start().catch(err => console.error(err.toString()));
+</script>
+</body>
+</html>
