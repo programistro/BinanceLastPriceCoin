@@ -8,6 +8,10 @@
 <body>
 <h1>BTCUSDT Price: <span id="price"></span></h1>
 
+<h1>Bitcoin Price: <span id="price1"></span></h1>
+
+<div id="priceChanges"></div>
+
 <script>
     const connection = new signalR.HubConnectionBuilder()
         .withUrl("/lastPrice")
@@ -17,7 +21,21 @@
         document.getElementById("price").innerText = price;
     });
 
+    connection.on("ReceivePriceUpdate", (price) => {
+        document.getElementById("price1").innerText = price;
+    });
+
+    connection.on("ReceivePriceChanges", (data) => {
+        const priceChangesDiv = document.getElementById("priceChanges");
+        priceChangesDiv.innerHTML = `
+                <p>Изменение за 5 минут: ${data.change5Min.toFixed(2)}%</p>
+                <p>Изменение за 10 минут: ${data.change10Min.toFixed(2)}%</p>
+                <p>Изменение за 15 минут: ${data.change15Min.toFixed(2)}%</p>
+            `;
+    });
+
     connection.start().catch(err => console.error(err.toString()));
 </script>
+
 </body>
 </html>

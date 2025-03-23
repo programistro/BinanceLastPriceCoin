@@ -1,4 +1,5 @@
 ﻿using Binance.Net.Clients;
+using Binance.Net.Enums;
 using BinanceApi.Web.Hubs;
 using Microsoft.AspNetCore.SignalR;
 
@@ -16,31 +17,12 @@ public class LastPriceBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        var binanceClient = new BinanceSocketClient();
+
+        var subscription = await binanceClient.SpotApi.ExchangeData.SubscribeToTickerUpdatesAsync("BTCUSDT", data =>
         {
-            try
-            {
-                // Получаем цену BTCUSDT
-                var tickerResult = await _restClient.SpotApi.ExchangeData.GetTickerAsync("BTCUSDT", stoppingToken);
-                if (tickerResult.Success)
-                {
-                    var lastPrice = tickerResult.Data.LastPrice;
-
-                    // Отправляем цену всем клиентам через SignalR
-                    await _hubContext.Clients.All.SendAsync("ReceivePrice", lastPrice, cancellationToken: stoppingToken);
-                }
-                else
-                {
-                    Console.WriteLine("Ошибка при получении данных: " + tickerResult.Error?.Message);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Ошибка: " + ex.Message);
-            }
-
-            // Ожидаем 1 секунду перед следующим запросом
-            await Task.Delay(1000, stoppingToken);
-        }
+            var price = data.Data.LastPrice;
+            _hubContext.Clients.All.SendAsync("ReceivePriceUpdate", price);
+        });
     }
 }
