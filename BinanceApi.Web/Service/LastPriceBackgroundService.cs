@@ -10,9 +10,11 @@ namespace BinanceApi.Web.Service;
 public class LastPriceBackgroundService : BackgroundService
 {
     private readonly BinanceRestClient _restClient = new();
+    private readonly BinanceSocketClient _socketClient = new();
     private readonly IHubContext<BinanceHub> _hubContext;
     private readonly ConcurrentDictionary<string, UpdateSubscription> _activeSubscriptions = new();
     private readonly ConcurrentDictionary<string, HashSet<string>> _symbolConnections = new();
+    private readonly ConcurrentDictionary<string, UpdateSubscription> _orderBookSubscriptions = new();
 
     public LastPriceBackgroundService(IHubContext<BinanceHub> hubContext)
     {
@@ -32,12 +34,10 @@ public class LastPriceBackgroundService : BackgroundService
     
     public async Task AddSubscription(string connectionId, string symbol)
     {
-        // Добавляем подключение к списку для этого символа
         _symbolConnections.AddOrUpdate(symbol,
             new HashSet<string> { connectionId },
             (_, set) => { set.Add(connectionId); return set; });
 
-        // Если подписка на этот символ еще не существует - создаем
         if (!_activeSubscriptions.ContainsKey(symbol))
         {
             var binanceClient = new BinanceSocketClient();
@@ -50,6 +50,30 @@ public class LastPriceBackgroundService : BackgroundService
                 });
 
             _activeSubscriptions[symbol] = subscription.Data;
+        }
+    }
+    
+    public async Task SubscribeToOrderBook(string connectionId, string symbol, int levels = 10)
+    {
+        _symbolConnections.AddOrUpdate($"OB_{symbol}",
+            new HashSet<string> { connectionId },
+            (_, set) => { set.Add(connectionId); return set; });
+
+        if (!_orderBookSubscriptions.ContainsKey(symbol))
+        {
+            var subscription = await _socketClient.SpotApi.ExchangeData
+                .SubscribeToOrderBookUpdatesAsync(symbol, levels, data =>
+                {
+                    var book = data.Data;
+                    _hubContext.Clients.Group($"ORDERBOOK_{symbol}").SendAsync("OrderBookUpdate", new {
+                        Symbol = symbol,
+                        Bids = book.Bids.Take(levels),
+                        Asks = book.Asks.Take(levels),
+                        LastUpdateId = book.LastUpdateId
+                    });
+                });
+
+            _orderBookSubscriptions[symbol] = subscription.Data;
         }
     }
     
@@ -84,5 +108,31 @@ public class LastPriceBackgroundService : BackgroundService
         });
 
         _activeSubscriptions[symbol] = subscription.Data;
+    }
+    
+    public async Task Unsubscribe(string connectionId, string symbol)
+    {
+        await RemoveFromGroup(connectionId, symbol, _activeSubscriptions, $"PRICE_{symbol}");
+        await RemoveFromGroup(connectionId, symbol, _orderBookSubscriptions, $"ORDERBOOK_{symbol}");
+    }
+    
+    private async Task RemoveFromGroup(string connectionId, string symbol, 
+        ConcurrentDictionary<string, UpdateSubscription> subscriptions, string groupPrefix)
+    {
+        var groupKey = groupPrefix.StartsWith("PRICE") ? symbol : $"OB_{symbol}";
+        
+        if (_symbolConnections.TryGetValue(groupKey, out var connections))
+        {
+            connections.Remove(connectionId);
+            
+            if (connections.Count == 0)
+            {
+                if (subscriptions.TryRemove(symbol, out var subscription))
+                {
+                    await subscription.CloseAsync();
+                }
+                _symbolConnections.TryRemove(groupKey, out _);
+            }
+        }
     }
 }

@@ -1,8 +1,5 @@
 ﻿using Binance.Net.Clients;
-using Binance.Net.Interfaces;
-using BinanceApi.Web.Models;
 using BinanceApi.Web.Service;
-using CryptoExchange.Net.Objects.Sockets;
 using Microsoft.AspNetCore.SignalR;
 
 namespace BinanceApi.Web.Hubs;
@@ -31,10 +28,21 @@ public class BinanceHub : Hub
         });
     }
     
-    // public async Task UnsubscribeFromPriceUpdates(string symbol)
-    // {
-    //     await Groups.RemoveFromGroupAsync(Context.ConnectionId, symbol);
-    // }
+    public async Task SubscribeOrderBook(string symbol, int levels = 10)
+    {
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"ORDERBOOK_{symbol}");
+        await _lastPriceBackgroundService.SubscribeToOrderBook(Context.ConnectionId, symbol, levels);
+        
+        // Отправляем текущий стакан
+        var orderBook = await _restClient.SpotApi.ExchangeData.GetOrderBookAsync(symbol, levels);
+        await Clients.Caller.SendAsync("OrderBookUpdate", new {
+            Symbol = symbol,
+            Bids = orderBook.Data.Bids,
+            Asks = orderBook.Data.Asks,
+            LastUpdateId = orderBook.Data.LastUpdateId
+        });
+    }
+
     
     public async Task SubscribeToPriceUpdates(string symbol)
     {
