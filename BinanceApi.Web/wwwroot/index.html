@@ -1,53 +1,167 @@
 ﻿<!DOCTYPE html>
 <html lang="en">
+<!--<head>-->
+<!--    <meta charset="UTF-8">-->
+<!--    <title>Test</title>-->
+<!--    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/5.0.11/signalr.min.js"></script>-->
+<!--</head>-->
+<!--<body>-->
+
+<!--<input type="text" id="symbol">-->
+<!--<input type="button" id="sendBtn" value="Отправить" />-->
+
+<!--<h1>BTCUSDT Price: <span id="price"></span></h1>-->
+
+<!--<h1>Bitcoin Price: <span id="price1"></span></h1>-->
+
+<!--<script>-->
+<!--    const connection = new signalR.HubConnectionBuilder()-->
+<!--        .withUrl("/lastPrice")-->
+<!--        .build();-->
+
+<!--    connection.on("ReceivePrice", (price) => {-->
+<!--        document.getElementById("price").innerText = price;-->
+<!--    });-->
+
+<!--    connection.on("ReceivePriceUpdate", (price) => {-->
+<!--        document.getElementById("price1").innerText = price;-->
+<!--    });-->
+
+<!--    document.getElementById("sendBtn").addEventListener("click", function () {-->
+<!--        let message = document.getElementById("symbol").value;-->
+<!--        connection.invoke("GetLastPrice", message)-->
+<!--            .catch(function (err) {-->
+<!--                return console.error(err.toString());-->
+<!--            });-->
+<!--    });-->
+<!--    -->
+<!--    connection.start().catch(err => console.error(err.toString()));-->
+<!--</script>-->
+
+<!--</body>-->
+
 <head>
-    <meta charset="UTF-8">
-    <title>Test</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/5.0.11/signalr.min.js"></script>
+    <title>Binance Price Tracker</title>
+    <style>
+        /* ... (прежние стили остаются) ... */
+        .subscription-list {
+            margin-top: 20px;
+        }
+        .subscription-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            background: #f8f9fa;
+            margin-bottom: 5px;
+            border-radius: 4px;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/5.0.11/signalr.min.js"></script>-->
 </head>
 <body>
+<div class="container">
+    <h1>Binance Price Tracker</h1>
 
-<input type="text" id="symbol">
-<input type="button" id="sendBtn" value="Отправить" />
+    <div class="control-panel">
+        <input type="text" id="symbolInput" placeholder="Enter symbol (e.g. BTCUSDT)" value="BTCUSDT">
+        <button id="subscribeBtn">Subscribe</button>
+        <button id="unsubscribeBtn">Unsubscribe</button>
+    </div>
 
-<h1>BTCUSDT Price: <span id="price"></span></h1>
+    <div class="subscription-list" id="subscriptionList">
+        <h3>Your subscriptions:</h3>
+        <!-- Активные подписки будут здесь -->
+    </div>
 
-<h1>Bitcoin Price: <span id="price1"></span></h1>
-
-<div id="priceChanges"></div>
+    <div class="price-list" id="priceList">
+        <h3>Price updates:</h3>
+        <!-- Цены будут здесь -->
+    </div>
+</div>
 
 <script>
     const connection = new signalR.HubConnectionBuilder()
         .withUrl("/lastPrice")
         .build();
 
-    connection.on("ReceivePrice", (price) => {
-        document.getElementById("price").innerText = price;
-    });
+    // Управление подписками в UI
+    function addSubscriptionToUI(symbol) {
+        const subList = document.getElementById('subscriptionList');
+        const subItem = document.createElement('div');
+        subItem.className = 'subscription-item';
+        subItem.id = `sub-${symbol}`;
 
-    connection.on("ReceivePriceUpdate", (price) => {
-        document.getElementById("price1").innerText = price;
-    });
-    
-    connection.on("ReceivePriceChanges", (data) => {
-        const priceChangesDiv = document.getElementById("priceChanges");
-        priceChangesDiv.innerHTML = `
-                <p>Изменение за 5 минут: ${data.change5Min.toFixed(2)}</p>
-                <p>Изменение за 10 минут: ${data.change10Min.toFixed(2)}</p>
-                <p>Изменение за 15 минут: ${data.change15Min.toFixed(2)}</p>
+        subItem.innerHTML = `
+                <span>${symbol}</span>
+                <button onclick="unsubscribe('${symbol}')">Unsubscribe</button>
             `;
-    });
 
-    document.getElementById("sendBtn").addEventListener("click", function () {
-        let message = document.getElementById("symbol").value;
-        connection.invoke("GetLastPrice", message)
-            .catch(function (err) {
-                return console.error(err.toString());
-            });
-    });
+        subList.appendChild(subItem);
+    }
+
+    function updatePriceDisplay(symbol, price) {
+        let priceItem = document.getElementById(`price-${symbol}`);
+
+        if (!priceItem) {
+            priceItem = document.createElement('div');
+            priceItem.className = 'price-item';
+            priceItem.id = `price-${symbol}`;
+
+            const symbolSpan = document.createElement('span');
+            symbolSpan.className = 'symbol';
+            symbolSpan.textContent = symbol;
+
+            const priceSpan = document.createElement('span');
+            priceSpan.className = 'price';
+
+            priceItem.appendChild(symbolSpan);
+            priceItem.appendChild(priceSpan);
+
+            document.getElementById('priceList').prepend(priceItem);
+        }
+
+        priceItem.querySelector('.price').textContent = parseFloat(price).toFixed(8);
+    }
     
-    connection.start().catch(err => console.error(err.toString()));
-</script>
+    function removeSubscriptionFromUI(symbol) {
+        const subItem = document.getElementById(`sub-${symbol}`);
+        if (subItem) subItem.remove();
+    }
 
+    // Глобальные функции для вызова из HTML
+    window.unsubscribe = async function(symbol) {
+        try {
+            await connection.invoke("UnsubscribeFromPriceUpdates", symbol);
+            removeSubscriptionFromUI(symbol);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    // Подключение к хабу
+    connection.start()
+        .then(() => {
+            console.log("Connected to hub");
+
+            document.getElementById('subscribeBtn').addEventListener('click', async () => {
+                const symbol = document.getElementById('symbolInput').value.toUpperCase();
+                if (!symbol) return;
+
+                try {
+                    await connection.invoke("SubscribeToPriceUpdates", symbol);
+                    addSubscriptionToUI(symbol);
+                } catch (err) {
+                    console.error(err);
+                }
+            });
+        })
+        .catch(err => console.error(err));
+
+    // Обработка обновлений цен
+    connection.on("ReceivePriceUpdate", (data) => {
+        console.log(data);
+        updatePriceDisplay(data.symbol, data.price);
+    });
+</script>
 </body>
 </html>

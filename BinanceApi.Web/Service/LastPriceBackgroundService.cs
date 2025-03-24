@@ -1,4 +1,5 @@
-﻿using Binance.Net.Clients;
+﻿using System.Collections.Concurrent;
+using Binance.Net.Clients;
 using Binance.Net.Enums;
 using BinanceApi.Web.Hubs;
 using CryptoExchange.Net.Objects.Sockets;
@@ -10,7 +11,8 @@ public class LastPriceBackgroundService : BackgroundService
 {
     private readonly BinanceRestClient _restClient = new();
     private readonly IHubContext<BinanceHub> _hubContext;
-    private readonly Dictionary<string, UpdateSubscription> _activeSubscriptions = new();
+    private readonly ConcurrentDictionary<string, UpdateSubscription> _activeSubscriptions = new();
+    private readonly ConcurrentDictionary<string, HashSet<string>> _symbolConnections = new();
 
     public LastPriceBackgroundService(IHubContext<BinanceHub> hubContext)
     {
@@ -25,31 +27,48 @@ public class LastPriceBackgroundService : BackgroundService
         {
             var price = data.Data.LastPrice;
             _hubContext.Clients.All.SendAsync("ReceivePriceUpdate", price);
-            
-            var klinesResult = binanceClient.SpotApi.ExchangeData.GetKlinesAsync(
-                "BTCUSDT",
-                KlineInterval.OneMinute,
-                DateTime.UtcNow.AddMinutes(-15),
-                DateTime.UtcNow).Result;
-        
-            var klines = klinesResult.Data.Result.ToList();
-        
-            var priceNow = klines.Last().ClosePrice;
-            var price5MinAgo = klines[klines.Count - 6].ClosePrice;
-            var price10MinAgo = klines[klines.Count - 11].ClosePrice;
-            var price15MinAgo = klines.First().ClosePrice;
-
-            // var change5Min = CalculatePriceChange(priceNow, price5MinAgo);
-            // var change10Min = CalculatePriceChange(priceNow, price10MinAgo);
-            // var change15Min = CalculatePriceChange(priceNow, price15MinAgo);
-
-            _hubContext.Clients.All.SendAsync("ReceivePriceChanges", new
-            {
-                Change5Min = price5MinAgo,
-                Change10Min = price10MinAgo,
-                Change15Min = price15MinAgo
-            });
         }, stoppingToken);
+    }
+    
+    public async Task AddSubscription(string connectionId, string symbol)
+    {
+        // Добавляем подключение к списку для этого символа
+        _symbolConnections.AddOrUpdate(symbol,
+            new HashSet<string> { connectionId },
+            (_, set) => { set.Add(connectionId); return set; });
+
+        // Если подписка на этот символ еще не существует - создаем
+        if (!_activeSubscriptions.ContainsKey(symbol))
+        {
+            var binanceClient = new BinanceSocketClient();
+            var subscription = await binanceClient.SpotApi.ExchangeData
+                .SubscribeToTickerUpdatesAsync(symbol, data =>
+                {
+                    var price = data.Data.LastPrice;
+                    _hubContext.Clients.Group(symbol)
+                        .SendAsync("ReceivePriceUpdate", new { Symbol = symbol, Price = price });
+                });
+
+            _activeSubscriptions[symbol] = subscription.Data;
+        }
+    }
+    
+    public async Task RemoveSubscription(string connectionId, string symbol)
+    {
+        if (_symbolConnections.TryGetValue(symbol, out var connections))
+        {
+            connections.Remove(connectionId);
+            
+            // Если больше нет подключений для этого символа - отписываемся
+            if (connections.Count == 0)
+            {
+                if (_activeSubscriptions.TryRemove(symbol, out var subscription))
+                {
+                    await subscription.CloseAsync();
+                }
+                _symbolConnections.TryRemove(symbol, out _);
+            }
+        }
     }
     
     public async Task SubscribeToTicker(string symbol)
@@ -65,14 +84,5 @@ public class LastPriceBackgroundService : BackgroundService
         });
 
         _activeSubscriptions[symbol] = subscription.Data;
-    }
-
-    public async Task UnsubscribeFromTicker(string symbol)
-    {
-        if (_activeSubscriptions.TryGetValue(symbol, out var subscription))
-        {
-            await subscription.CloseAsync();
-            _activeSubscriptions.Remove(symbol);
-        }
     }
 }
