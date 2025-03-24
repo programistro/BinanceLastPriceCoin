@@ -1,30 +1,31 @@
 ﻿using Binance.Net.Clients;
 using Binance.Net.Interfaces;
 using BinanceApi.Web.Models;
+using BinanceApi.Web.Service;
 using CryptoExchange.Net.Objects.Sockets;
 using Microsoft.AspNetCore.SignalR;
 
 namespace BinanceApi.Web.Hubs;
 
-public class BinanceHub : Hub
+public class BinanceHub(LastPriceBackgroundService lastPriceBackgroundService) : Hub
 {
     private BinanceRestClient _restClient = new ();
-    
-    private readonly IBinanceDataProvider _dataProvider;
 
-    private IEnumerable<IBinanceTick> _ticks = new List<IBinanceTick>();
-    private UpdateSubscription _subscription;
-    
-    public BinanceHub(IBinanceDataProvider dataProvider)
+    public async Task GetLastPrice(string symbol)
     {
-        _dataProvider = dataProvider;
+        await Groups.AddToGroupAsync(Context.ConnectionId, symbol);
+        
+        await lastPriceBackgroundService.SubscribeToTicker(symbol);
+        
+        var tickerResult = await _restClient.SpotApi.ExchangeData.GetTickerAsync(symbol);
+        await Clients.Caller.SendAsync("ReceivePriceUpdate", new { 
+            Symbol = symbol, 
+            Price = tickerResult.Data.LastPrice 
+        });
     }
     
-    public async Task GetLastPrice()
+    public async Task UnsubscribeFromPriceUpdates(string symbol)
     {
-        var tickerResult = await _restClient.SpotApi.ExchangeData.GetTickerAsync("BTCUSDT");
-        var lastPrice = tickerResult.Data.LastPrice;
-        
-        await this.Clients.All.SendAsync("GetLastPrice", lastPrice);
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, symbol);
     }
 }

@@ -9,6 +9,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LastPriceBackgroundService>();
+builder.Services.AddSingleton<LastPriceBackgroundService>();
 builder.Services.AddHostedService<LastPriceCoinBackgroundService>();
 builder.Services.AddBinance();
 builder.Services.AddSingleton<IBinanceDataProvider, BinanceDataProvider>();
@@ -22,13 +23,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
-// app.UseCors(policyBuilder =>
-// {
-//     policyBuilder.WithOrigins("http://localhost:63342")
-//         .AllowAnyMethod()
-//         .AllowAnyHeader();
-// });
 
 app.UseStaticFiles();
 

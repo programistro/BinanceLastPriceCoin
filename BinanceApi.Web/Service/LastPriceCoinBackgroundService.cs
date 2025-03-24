@@ -38,17 +38,15 @@ public class LastPriceCoinBackgroundService : BackgroundService
             var price10MinAgo = klines[klines.Count - 11].ClosePrice;
             var price15MinAgo = klines.First().ClosePrice;
 
-            // Рассчитываем изменение цены в процентах
-            var change5Min = CalculatePriceChange(priceNow, price5MinAgo);
-            var change10Min = CalculatePriceChange(priceNow, price10MinAgo);
-            var change15Min = CalculatePriceChange(priceNow, price15MinAgo);
+            // var change5Min = CalculatePriceChange(priceNow, price5MinAgo);
+            // var change10Min = CalculatePriceChange(priceNow, price10MinAgo);
+            // var change15Min = CalculatePriceChange(priceNow, price15MinAgo);
 
-            // Отправляем данные клиенту
             await _hubContext.Clients.All.SendAsync("ReceivePriceChanges", new
             {
-                Change5Min = change5Min,
-                Change10Min = change10Min,
-                Change15Min = change15Min
+                Change5Min = price5MinAgo,
+                Change10Min = price10MinAgo,
+                Change15Min = price15MinAgo
             });
             
             await Task.Delay(1000, stoppingToken);
