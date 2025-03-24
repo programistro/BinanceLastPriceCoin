@@ -10,9 +10,7 @@ builder.Services.AddControllers();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LastPriceBackgroundService>();
 builder.Services.AddSingleton<LastPriceBackgroundService>();
-builder.Services.AddHostedService<LastPriceCoinBackgroundService>();
 builder.Services.AddBinance();
-builder.Services.AddSingleton<IBinanceDataProvider, BinanceDataProvider>();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();

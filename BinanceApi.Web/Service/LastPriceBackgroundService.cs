@@ -25,6 +25,30 @@ public class LastPriceBackgroundService : BackgroundService
         {
             var price = data.Data.LastPrice;
             _hubContext.Clients.All.SendAsync("ReceivePriceUpdate", price);
+            
+            var klinesResult = binanceClient.SpotApi.ExchangeData.GetKlinesAsync(
+                "BTCUSDT",
+                KlineInterval.OneMinute,
+                DateTime.UtcNow.AddMinutes(-15),
+                DateTime.UtcNow).Result;
+        
+            var klines = klinesResult.Data.Result.ToList();
+        
+            var priceNow = klines.Last().ClosePrice;
+            var price5MinAgo = klines[klines.Count - 6].ClosePrice;
+            var price10MinAgo = klines[klines.Count - 11].ClosePrice;
+            var price15MinAgo = klines.First().ClosePrice;
+
+            // var change5Min = CalculatePriceChange(priceNow, price5MinAgo);
+            // var change10Min = CalculatePriceChange(priceNow, price10MinAgo);
+            // var change15Min = CalculatePriceChange(priceNow, price15MinAgo);
+
+            _hubContext.Clients.All.SendAsync("ReceivePriceChanges", new
+            {
+                Change5Min = price5MinAgo,
+                Change10Min = price10MinAgo,
+                Change15Min = price15MinAgo
+            });
         }, stoppingToken);
     }
     
