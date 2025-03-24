@@ -30,6 +30,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.MapHub<BinanceHub>("/lastPrice");
+app.MapHub<BinanceHub>("/connectHub");
 
 app.Run();
