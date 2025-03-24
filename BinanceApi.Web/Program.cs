@@ -8,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSwaggerGen();
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
+builder.Services.AddCors(); 
 builder.Services.AddHostedService<LastPriceBackgroundService>();
 builder.Services.AddSingleton<LastPriceBackgroundService>();
 builder.Services.AddBinance();
