@@ -62,11 +62,12 @@ public class LastPriceBackgroundService : BackgroundService
         if (!_orderBookSubscriptions.ContainsKey(symbol))
         {
             var subscription = await _socketClient.SpotApi.ExchangeData
-                .SubscribeToOrderBookUpdatesAsync(symbol, levels, data =>
+                .SubscribeToOrderBookUpdatesAsync(symbol, 1000, data =>
                 {
                     var book = data.Data;
                     _hubContext.Clients.Group($"ORDERBOOK_{symbol}").SendAsync("OrderBookUpdate", new {
                         Symbol = symbol,
+                        levels = levels,
                         Bids = book.Bids.Take(levels),
                         Asks = book.Asks.Take(levels),
                         LastUpdateId = book.LastUpdateId

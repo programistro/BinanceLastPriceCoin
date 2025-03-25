@@ -28,12 +28,11 @@ public class BinanceHub : Hub
         });
     }
     
-    public async Task SubscribeOrderBook(string symbol, int levels = 10)
+    public async Task SubscribeOrderBook(string symbol, int levels)
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, $"ORDERBOOK_{symbol}");
         await _lastPriceBackgroundService.SubscribeToOrderBook(Context.ConnectionId, symbol, levels);
         
-        // Отправляем текущий стакан
         var orderBook = await _restClient.SpotApi.ExchangeData.GetOrderBookAsync(symbol, levels);
         await Clients.Caller.SendAsync("OrderBookUpdate", new {
             Symbol = symbol,
@@ -43,7 +42,6 @@ public class BinanceHub : Hub
         });
     }
 
-    
     public async Task SubscribeToPriceUpdates(string symbol)
     {
         // Добавляем клиента в группу по символу

@@ -1,167 +1,322 @@
 ﻿<!DOCTYPE html>
 <html lang="en">
-<!--<head>-->
-<!--    <meta charset="UTF-8">-->
-<!--    <title>Test</title>-->
-<!--    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/5.0.11/signalr.min.js"></script>-->
-<!--</head>-->
-<!--<body>-->
-
-<!--<input type="text" id="symbol">-->
-<!--<input type="button" id="sendBtn" value="Отправить" />-->
-
-<!--<h1>BTCUSDT Price: <span id="price"></span></h1>-->
-
-<!--<h1>Bitcoin Price: <span id="price1"></span></h1>-->
-
-<!--<script>-->
-<!--    const connection = new signalR.HubConnectionBuilder()-->
-<!--        .withUrl("/lastPrice")-->
-<!--        .build();-->
-
-<!--    connection.on("ReceivePrice", (price) => {-->
-<!--        document.getElementById("price").innerText = price;-->
-<!--    });-->
-
-<!--    connection.on("ReceivePriceUpdate", (price) => {-->
-<!--        document.getElementById("price1").innerText = price;-->
-<!--    });-->
-
-<!--    document.getElementById("sendBtn").addEventListener("click", function () {-->
-<!--        let message = document.getElementById("symbol").value;-->
-<!--        connection.invoke("GetLastPrice", message)-->
-<!--            .catch(function (err) {-->
-<!--                return console.error(err.toString());-->
-<!--            });-->
-<!--    });-->
-<!--    -->
-<!--    connection.start().catch(err => console.error(err.toString()));-->
-<!--</script>-->
-
-<!--</body>-->
-
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Binance Price Tracker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
     <style>
-        /* ... (прежние стили остаются) ... */
-        .subscription-list {
-            margin-top: 20px;
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
         }
-        .subscription-item {
+        .container {
             display: flex;
-            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .panel {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            flex: 1;
+            min-width: 300px;
+        }
+        .price-display {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .order-book {
+            display: flex;
+            gap: 20px;
+        }
+        .order-book-side {
+            flex: 1;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
             padding: 8px;
-            background: #f8f9fa;
-            margin-bottom: 5px;
-            border-radius: 4px;
+            text-align: right;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .bid-row {
+            background-color: rgba(0, 255, 0, 0.1);
+        }
+        .ask-row {
+            background-color: rgba(255, 0, 0, 0.1);
+        }
+        input, button {
+            padding: 8px;
+            margin: 5px 0;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
         }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/5.0.11/signalr.min.js"></script>
 </head>
 <body>
+<h1>Binance Price Tracker</h1>
+
+<div class="status disconnected" id="connectionStatus">Disconnected</div>
+
 <div class="container">
-    <h1>Binance Price Tracker</h1>
-
-    <div class="control-panel">
-        <input type="text" id="symbolInput" placeholder="Enter symbol (e.g. BTCUSDT)" value="BTCUSDT">
-        <button id="subscribeBtn">Subscribe</button>
-        <button id="unsubscribeBtn">Unsubscribe</button>
+    <div class="panel">
+        <h2>Price Subscription</h2>
+        <div>
+            <input type="text" id="priceSymbol" placeholder="Symbol (e.g., BTCUSDT)" value="BTCUSDT">
+            <button id="subscribePrice">Subscribe</button>
+            <button id="unsubscribePrice">Unsubscribe</button>
+        </div>
+        <div id="priceContainer">
+            <div class="price-display" id="currentPrice">-</div>
+            <div id="priceSymbolDisplay"></div>
+        </div>
     </div>
 
-    <div class="subscription-list" id="subscriptionList">
-        <h3>Your subscriptions:</h3>
-        <!-- Активные подписки будут здесь -->
-    </div>
-
-    <div class="price-list" id="priceList">
-        <h3>Price updates:</h3>
-        <!-- Цены будут здесь -->
+    <div class="panel">
+        <h2>Order Book Subscription</h2>
+        <div>
+            <input type="text" id="orderBookSymbol" placeholder="Symbol (e.g., BTCUSDT)" value="BTCUSDT">
+            <input type="number" id="orderBookLevels" placeholder="Levels" value="10" min="1" max="100">
+            <button id="subscribeOrderBook">Subscribe</button>
+            <button id="unsubscribeOrderBook">Unsubscribe</button>
+        </div>
+        <div id="orderBookContainer">
+            <div class="order-book">
+                <div class="order-book-side">
+                    <h3>Bids</h3>
+                    <table id="bidsTable">
+                        <thead>
+                        <tr>
+                            <th>Price</th>
+                            <th>Quantity</th>
+                        </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="order-book-side">
+                    <h3>Asks</h3>
+                    <table id="asksTable">
+                        <thead>
+                        <tr>
+                            <th>Price</th>
+                            <th>Quantity</th>
+                        </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="lastUpdateId">Last Update ID: -</div>
+        </div>
     </div>
 </div>
 
 <script>
+    // SignalR connection
     const connection = new signalR.HubConnectionBuilder()
-        .withUrl("https://localhost:7033/connectHub")
+        .withUrl("/connectHub")
+        .configureLogging(signalR.LogLevel.Information)
         .build();
 
-    // Управление подписками в UI
-    function addSubscriptionToUI(symbol) {
-        const subList = document.getElementById('subscriptionList');
-        const subItem = document.createElement('div');
-        subItem.className = 'subscription-item';
-        subItem.id = `sub-${symbol}`;
-
-        subItem.innerHTML = `
-                <span>${symbol}</span>
-                <button onclick="unsubscribe('${symbol}')">Unsubscribe</button>
-            `;
-
-        subList.appendChild(subItem);
-    }
-
-    function updatePriceDisplay(symbol, price) {
-        let priceItem = document.getElementById(`price-${symbol}`);
-
-        if (!priceItem) {
-            priceItem = document.createElement('div');
-            priceItem.className = 'price-item';
-            priceItem.id = `price-${symbol}`;
-
-            const symbolSpan = document.createElement('span');
-            symbolSpan.className = 'symbol';
-            symbolSpan.textContent = symbol;
-
-            const priceSpan = document.createElement('span');
-            priceSpan.className = 'price';
-
-            priceItem.appendChild(symbolSpan);
-            priceItem.appendChild(priceSpan);
-
-            document.getElementById('priceList').prepend(priceItem);
-        }
-
-        priceItem.querySelector('.price').textContent = parseFloat(price).toFixed(8);
-    }
-    
-    function removeSubscriptionFromUI(symbol) {
-        const subItem = document.getElementById(`sub-${symbol}`);
-        if (subItem) subItem.remove();
-    }
-
-    // Глобальные функции для вызова из HTML
-    window.unsubscribe = async function(symbol) {
+    // Connection status management
+    async function startConnection() {
         try {
-            await connection.invoke("UnsubscribeFromPriceUpdates", symbol);
-            removeSubscriptionFromUI(symbol);
+            await connection.start();
+            console.log("SignalR Connected.");
+            document.getElementById('connectionStatus').textContent = "Connected";
+            document.getElementById('connectionStatus').className = "status connected";
+        } catch (err) {
+            console.log(err);
+            setTimeout(startConnection, 5000);
+        }
+    }
+
+    connection.onclose(async () => {
+        document.getElementById('connectionStatus').textContent = "Disconnected";
+        document.getElementById('connectionStatus').className = "status disconnected";
+        await startConnection();
+    });
+
+    // Start the connection
+    startConnection();
+
+    // Price subscription handlers
+    document.getElementById('subscribePrice').addEventListener('click', async () => {
+        const symbol = document.getElementById('priceSymbol').value.toUpperCase();
+        if (!symbol) return;
+
+        try {
+            await connection.invoke("SubscribeToPriceUpdates", symbol);
+            document.getElementById('priceSymbolDisplay').textContent = symbol;
         } catch (err) {
             console.error(err);
         }
-    };
-
-    // Подключение к хабу
-    connection.start()
-        .then(() => {
-            console.log("Connected to hub");
-
-            document.getElementById('subscribeBtn').addEventListener('click', async () => {
-                const symbol = document.getElementById('symbolInput').value.toUpperCase();
-                if (!symbol) return;
-
-                try {
-                    await connection.invoke("SubscribeToPriceUpdates", symbol);
-                    addSubscriptionToUI(symbol);
-                } catch (err) {
-                    console.error(err);
-                }
-            });
-        })
-        .catch(err => console.error(err));
-
-    // Обработка обновлений цен
-    connection.on("ReceivePriceUpdate", (data) => {
-        console.log(data);
-        updatePriceDisplay(data.symbol, data.price);
     });
+
+    document.getElementById('unsubscribePrice').addEventListener('click', async () => {
+        const symbol = document.getElementById('priceSymbol').value.toUpperCase();
+        if (!symbol) return;
+
+        try {
+            await connection.invoke("UnsubscribeFromPriceUpdates", symbol);
+            document.getElementById('currentPrice').textContent = "-";
+            document.getElementById('priceSymbolDisplay').textContent = "";
+        } catch (err) {
+            console.error(err);
+        }
+    });
+
+    // Order book subscription handlers
+    document.getElementById('subscribeOrderBook').addEventListener('click', async () => {
+        const symbol = document.getElementById('orderBookSymbol').value.toUpperCase();
+        const levels = parseInt(document.getElementById('orderBookLevels').value);
+        if (!symbol || isNaN(levels)) return;
+
+        try {
+            await connection.invoke("SubscribeOrderBook", symbol, levels);
+        } catch (err) {
+            console.error(err);
+        }
+    });
+
+    document.getElementById('unsubscribeOrderBook').addEventListener('click', async () => {
+        const symbol = document.getElementById('orderBookSymbol').value.toUpperCase();
+        if (!symbol) return;
+
+        try {
+            // Clear the order book display
+            document.querySelector('#bidsTable tbody').innerHTML = '';
+            document.querySelector('#asksTable tbody').innerHTML = '';
+            document.getElementById('lastUpdateId').textContent = 'Last Update ID: -';
+        } catch (err) {
+            console.error(err);
+        }
+    });
+
+    // Handle price updates
+    connection.on("ReceivePriceUpdate", (data) => {
+        console.log("Price update raw data:", data);
+
+        // Универсальный обработчик разных форматов данных
+        let price, symbol;
+
+        if (data && data.Price !== undefined) {
+            // Формат: { Symbol: "BTCUSDT", Price: 50000.12 }
+            price = data.Price;
+            symbol = data.Symbol;
+        } else if (data && data.lastPrice !== undefined) {
+            // Альтернативный формат: { lastPrice: 50000.12 }
+            price = data.lastPrice;
+            symbol = document.getElementById('priceSymbol').value.toUpperCase();
+        } else if (typeof data === 'number') {
+            // Если приходит просто число
+            price = data;
+            symbol = document.getElementById('priceSymbol').value.toUpperCase();
+        }
+
+        if (price !== undefined) {
+            document.getElementById('currentPrice').textContent = formatNumber(price);
+            document.getElementById('priceSymbolDisplay').textContent = symbol ||
+                document.getElementById('priceSymbol').value.toUpperCase();
+        }
+    });
+
+    // Handle order book updates
+    connection.on("OrderBookUpdate", (data) => {
+        console.log("Order book raw data:", data);
+
+        if (!data) return;
+
+        // Обработка стакана ордеров
+        try {
+            // Обновляем bids (покупки)
+            const bidsTable = document.querySelector('#bidsTable tbody');
+            bidsTable.innerHTML = '';
+
+            let bids = [];
+            if (data.Bids && Array.isArray(data.Bids)) {
+                bids = data.Bids;
+            } else if (data.bids && Array.isArray(data.bids)) {
+                bids = data.bids;
+            }
+
+            bids.slice(0, 10).forEach(bid => {
+                const row = document.createElement('tr');
+                row.className = 'bid-row';
+                row.innerHTML = `
+                        <td class="number-cell">${formatNumber(bid.price || bid[0])}</td>
+                        <td class="number-cell">${formatNumber(bid.quantity || bid[1])}</td>
+                    `;
+                bidsTable.appendChild(row);
+            });
+
+            // Обновляем asks (продажи)
+            const asksTable = document.querySelector('#asksTable tbody');
+            asksTable.innerHTML = '';
+
+            let asks = [];
+            if (data.Asks && Array.isArray(data.Asks)) {
+                asks = data.Asks;
+            } else if (data.asks && Array.isArray(data.asks)) {
+                asks = data.asks;
+            }
+
+            asks.slice(0, 10).forEach(ask => {
+                const row = document.createElement('tr');
+                row.className = 'ask-row';
+                row.innerHTML = `
+                        <td class="number-cell">${formatNumber(ask.price || ask[0])}</td>
+                        <td class="number-cell">${formatNumber(ask.quantity || ask[1])}</td>
+                    `;
+                asksTable.appendChild(row);
+            });
+
+            // Обновляем LastUpdateId
+            const updateId = data.LastUpdateId || data.lastUpdateId;
+            if (updateId !== undefined) {
+                document.getElementById('lastUpdateId').textContent = `Last Update ID: ${updateId}`;
+            }
+        } catch (e) {
+            console.error("Error processing order book data:", e);
+        }
+    });
+
+    // Улучшенная функция форматирования чисел
+    function formatNumber(num, decimals = 8) {
+        if (num === undefined || num === null) return '-';
+        const n = parseFloat(num);
+        if (isNaN(n)) return '-';
+
+        // Автоматически определяем нужное количество знаков после запятой
+        const parts = n.toString().split('.');
+        const actualDecimals = parts.length > 1 ? Math.min(parts[1].length, decimals) : 0;
+
+        return n.toLocaleString(undefined, {
+            minimumFractionDigits: actualDecimals,
+            maximumFractionDigits: decimals
+        });
+    }
 </script>
 </body>
 </html>
