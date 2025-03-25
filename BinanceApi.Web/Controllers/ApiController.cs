@@ -18,7 +18,7 @@ public class ApiController : ControllerBase
     public async Task<IActionResult> GetBtc()
     {
         var restClient = new BinanceRestClient();
-        var tickerResult = await restClient.SpotApi.ExchangeData.GetTickerAsync("ETHUSDT");
+        var tickerResult = await restClient.SpotApi.ExchangeData.GetTickerAsync("BTCUSDT");
         var lastPrice = tickerResult.Data.LastPrice;
         
         return Ok(lastPrice);
