@@ -81,7 +81,7 @@
 
 <script>
     const connection = new signalR.HubConnectionBuilder()
-        .withUrl("/lastPrice")
+        .withUrl("https://localhost:7033/connectHub")
         .build();
 
     // Управление подписками в UI
