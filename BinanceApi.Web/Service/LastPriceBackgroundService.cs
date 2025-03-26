@@ -2,6 +2,7 @@
 using Binance.Net.Clients;
 using Binance.Net.Enums;
 using BinanceApi.Web.Hubs;
+using BinanceApi.Web.Models;
 using CryptoExchange.Net.Objects.Sockets;
 using Microsoft.AspNetCore.SignalR;
 
@@ -15,7 +16,16 @@ public class LastPriceBackgroundService : BackgroundService
     private readonly ConcurrentDictionary<string, UpdateSubscription> _activeSubscriptions = new();
     private readonly ConcurrentDictionary<string, HashSet<string>> _symbolConnections = new();
     private readonly ConcurrentDictionary<string, UpdateSubscription> _orderBookSubscriptions = new();
-
+    private readonly ConcurrentDictionary<string, List<Kline>> _historicalKlines = new();
+    private readonly KlineInterval[] _monitoredIntervals = new[]
+    {
+        KlineInterval.OneMinute,
+        KlineInterval.FiveMinutes,
+        KlineInterval.FifteenMinutes,
+        KlineInterval.OneHour,
+        KlineInterval.OneDay
+    };
+    
     public LastPriceBackgroundService(IHubContext<BinanceHub> hubContext)
     {
         _hubContext = hubContext;
@@ -38,12 +48,93 @@ public class LastPriceBackgroundService : BackgroundService
             var subscription = await binanceClient.SpotApi.ExchangeData
                 .SubscribeToTickerUpdatesAsync(symbol, data =>
                 {
+                    var ticker = _restClient.SpotApi.ExchangeData.GetTickerAsync(symbol).Result;
                     var price = data.Data.LastPrice;
                     _hubContext.Clients.Group(symbol)
                         .SendAsync("ReceivePriceUpdate", new { Symbol = symbol, Price = price });
                 });
 
             _activeSubscriptions[symbol] = subscription.Data;
+        }
+    }
+    
+    public async Task<List<Kline>> GetKlinesForSymbol(string symbol, KlineInterval interval, int limit = 500)
+    {
+        var klinesResult = await _restClient.SpotApi.ExchangeData.GetKlinesAsync(
+            symbol, 
+            interval, 
+            limit: limit);
+
+        if (!klinesResult.Success) 
+            return new List<Kline>();
+
+        return klinesResult.Data.Select(k => new Kline
+        {
+            OpenTime = k.OpenTime,
+            CloseTime = k.CloseTime,
+            OpenPrice = k.OpenPrice,
+            HighPrice = k.HighPrice,
+            LowPrice = k.LowPrice,
+            ClosePrice = k.ClosePrice,
+            Volume = k.Volume,
+            QouteVolume = k.QuoteVolume,
+            TakerBuyBaseAssetVolume = k.TakerBuyBaseVolume,
+            TakerBuyQuoteAssetVolume = k.TakerBuyQuoteVolume
+        }).ToList();
+    }
+    
+    public async Task InitializeSymbolKlines(string symbol)
+    {
+        if (_historicalKlines.ContainsKey(symbol))
+            return;
+
+        var allKlines = new List<Kline>();
+        
+        foreach (var interval in _monitoredIntervals)
+        {
+            var klines = await GetKlinesForSymbol(symbol, interval);
+            allKlines.AddRange(klines);
+        }
+
+        _historicalKlines[symbol] = allKlines;
+    }
+
+    private async Task UpdateKlinesForSymbol(string symbol)
+    {
+        if (!_historicalKlines.TryGetValue(symbol, out var existingKlines))
+            return;
+
+        var updatedKlines = new List<Kline>();
+        
+        foreach (var interval in _monitoredIntervals)
+        {
+            var newKlines = await GetKlinesForSymbol(symbol, interval, limit: 1);
+            
+            // Обновляем только если появились новые данные
+            var lastExisting = existingKlines
+                .Where(k => k.CloseTime > DateTime.UtcNow.AddMinutes(-5))
+                .OrderByDescending(k => k.CloseTime)
+                .FirstOrDefault();
+            
+            if (newKlines.Any() && (lastExisting == null || newKlines[0].CloseTime > lastExisting.CloseTime))
+            {
+                updatedKlines.AddRange(newKlines);
+            }
+        }
+
+        if (updatedKlines.Any())
+        {
+            _historicalKlines[symbol] = existingKlines
+                .Where(k => k.CloseTime < DateTime.UtcNow.AddDays(-7)) // Храним неделю истории
+                .Concat(updatedKlines)
+                .OrderBy(k => k.CloseTime)
+                .ToList();
+
+            await _hubContext.Clients.Group($"KLINES_{symbol}").SendAsync("KlinesUpdate", 
+                _historicalKlines[symbol]
+                    .OrderByDescending(k => k.CloseTime)
+                    .Take(1000) // Лимит для отправки
+                    .ToList());
         }
     }
     

@@ -132,6 +132,24 @@
     </div>
 </div>
 
+<h1>Binance Kline Data</h1>
+<div>
+    <label>Symbol: <input id="symbolInput" value="BTCUSDT"></label>
+    <button id="subscribeBtn">Subscribe</button>
+    <button id="requestBtn">Request Data</button>
+    <select id="intervalSelect">
+        <option value="OneMinute">1 Minute</option>
+        <option value="FiveMinutes">5 Minutes</option>
+        <option value="FifteenMinutes">15 Minutes</option>
+        <option value="OneHour">1 Hour</option>
+        <option value="OneDay">1 Day</option>
+    </select>
+    <input id="limitInput" type="number" value="100" min="1" max="1000">
+</div>
+<div style="width: 800px; height: 500px;">
+    <canvas id="klineChart"></canvas>
+</div>
+
 <script>
     // SignalR connection
     const connection = new signalR.HubConnectionBuilder()
@@ -146,6 +164,10 @@
             console.log("SignalR Connected.");
             document.getElementById('connectionStatus').textContent = "Connected";
             document.getElementById('connectionStatus').className = "status connected";
+            
+            subscribeToKlines("BTCUSDT");
+            // Можно запросить дополнительные данные
+            requestKlines("BTCUSDT", "OneHour", 200);
         } catch (err) {
             console.log(err);
             setTimeout(startConnection, 5000);
@@ -317,6 +339,63 @@
             maximumFractionDigits: decimals
         });
     }
+
+    connection.on("InitialKlines", (klines) => {
+        console.log("Initial klines loaded:", klines);
+        renderKlineChart(klines);
+    });
+
+    connection.on("KlinesUpdate", (updatedKlines) => {
+        console.log("Klines updated:", updatedKlines);
+        updateKlineChart(updatedKlines);
+    });
+
+    connection.on("KlinesResponse", (klines) => {
+        console.log("Requested klines:", klines);
+        renderKlineChart(klines);
+    });
+
+    // Управление подписками
+    async function subscribeToKlines(symbol) {
+        await connection.invoke("SubscribeToKlines", symbol);
+    }
+
+    async function requestKlines(symbol, interval, limit) {
+        await connection.invoke("RequestKlines", symbol, interval, limit);
+    }
+
+    // Пример отрисовки графика
+    function renderKlineChart(klines) {
+        // Здесь реализация отрисовки графика с использованием библиотеки типа Chart.js
+        console.log("Rendering chart with", klines.length, "data points");
+
+        const ctx = document.getElementById('klineChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'candlestick',
+            data: {
+                datasets: [{
+                    label: 'BTC/USDT',
+                    data: klines.map(k => ({
+                        x: new Date(k.openTime),
+                        o: k.openPrice,
+                        h: k.highPrice,
+                        l: k.lowPrice,
+                        c: k.closePrice
+                    }))
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { type: 'time' }
+                }
+            }
+        });
+        }
 </script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
 </body>
 </html>

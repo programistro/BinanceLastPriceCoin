@@ -1,4 +1,5 @@
 ﻿using Binance.Net.Clients;
+using Binance.Net.Enums;
 using BinanceApi.Web.Service;
 using Microsoft.AspNetCore.SignalR;
 
@@ -57,4 +58,28 @@ public class BinanceHub : Hub
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, symbol);
         await _lastPriceBackgroundService.RemoveSubscription(Context.ConnectionId, symbol);
     }
+    
+        public async Task SubscribeToKlines(string symbol)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"KLINES_{symbol}");
+            
+            // Инициализируем данные при первой подписке
+            await _lastPriceBackgroundService.InitializeSymbolKlines(symbol);
+            
+            // Получаем текущие данные
+            var klines = await _lastPriceBackgroundService.GetKlinesForSymbol(symbol, KlineInterval.OneDay, 100);
+            await Clients.Caller.SendAsync("InitialKlines", klines);
+        }
+    
+        public async Task UnsubscribeFromKlines(string symbol)
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"KLINES_{symbol}");
+        }
+    
+        public async Task RequestKlines(string symbol, string interval, int limit)
+        {
+            var klineInterval = Enum.Parse<KlineInterval>(interval);
+            var klines = await _lastPriceBackgroundService.GetKlinesForSymbol(symbol, klineInterval, limit);
+            await Clients.Caller.SendAsync("KlinesResponse", klines);
+        }
 }
