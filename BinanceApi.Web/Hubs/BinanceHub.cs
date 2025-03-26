@@ -22,10 +22,6 @@ public class BinanceHub : Hub
         await _lastPriceBackgroundService.SubscribeToTicker(symbol);
         
         var tickerResult = await _restClient.SpotApi.ExchangeData.GetTickerAsync(symbol);
-        await Clients.Caller.SendAsync("ReceivePriceUpdate", new { 
-            Symbol = symbol, 
-            Price = tickerResult.Data.LastPrice 
-        });
     }
     
     public async Task SubscribeOrderBook(string symbol, int levels)
@@ -44,13 +40,10 @@ public class BinanceHub : Hub
 
     public async Task SubscribeToPriceUpdates(string symbol)
     {
-        // Добавляем клиента в группу по символу
         await Groups.AddToGroupAsync(Context.ConnectionId, symbol);
         
-        // Регистрируем подписку
         await _lastPriceBackgroundService.AddSubscription(Context.ConnectionId, symbol);
         
-        // Отправляем текущую цену сразу после подписки
         var tickerResult = await _restClient.SpotApi.ExchangeData.GetTickerAsync(symbol);
         await Clients.Caller.SendAsync("ReceivePriceUpdate", new 
         { 
